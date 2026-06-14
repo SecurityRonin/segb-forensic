@@ -13,7 +13,26 @@ stream** (see below). What remains unconfirmed is only the App.MenuItem
 *protobuf* field numbering, which requires a real `App.MenuItem/local` from
 macOS Tahoe 26 (the stream does not exist on earlier macOS).
 
-### Real-data reconciliation (2026-06-14)
+### Public iOS-17 reconciliation — 401/401, both variants (2026-06-14)
+
+The strongest validation: **Josh Hickman's public iOS 17.3 image** (DigitalCorpora,
+CC for research) contains real Apple Biome SEGB streams. segb-core was run against
+**every** SEGB file in it and reconciled against the ccl-segb reference oracle:
+
+| | count | segb-core vs ccl-segb |
+|---|---|---|
+| SEGB **v1** files | 139 | record counts match |
+| SEGB **v2** files | 262 | record counts match |
+| **Total** | **401** | **401 PASS / 0 MISMATCH** |
+
+Streams covered include `_DKEvent.Safari.History`, `_DKEvent.Device.BatteryPercentage`,
+`MicroLocationVisit`, `Siri.SelfTriggerSuppression`, DuetActivityScheduler
+app-launch/kill, `unifiedMessageStream`, etc. This validates **both** the v1 and v2
+container readers against real Apple data, publicly and reproducibly (provenance +
+MD5 in `issen/docs/corpus-catalog.md` entry A7). Note: the biome stream dirs unzip
+with restrictive Apple modes (0700) — `chmod -R u+rwX` before scanning.
+
+### Private macOS-15.7 reconciliation (2026-06-14)
 
 A real Biome SEGB v2 stream from a macOS 15.7 (Sequoia) host —
 `~/Library/Biome/streams/restricted/Lighthouse.Ledger.TaskTelemetry/local/...`,
