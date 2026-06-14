@@ -1,8 +1,9 @@
 //! Validation helper: dump SEGB record structure (state, timestamp, payload
-//! length) — NOT payload content. Run against a real Biome SEGB file to
-//! reconcile segb-core's container parse with the ccl-segb reference.
+//! length) — NOT payload content. Run against a real Biome SEGB file (e.g.
+//! `App.MenuItem`) to reconcile `segb-core`'s container parse with the
+//! `ccl-segb` reference.
 //!
-//! Usage: cargo run -p segb-core --example dump_structure -- <segb-file>
+//! Usage: `cargo run -p segb-core --example dump_structure -- <segb-file>`
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 fn main() {
