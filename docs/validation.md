@@ -2,13 +2,35 @@
 
 ## Summary
 
-**Real-sample validation is PENDING.**
+**The SEGB v2 container is validated against real Apple Biome data + the
+ccl-segb reference. The App.MenuItem protobuf field mapping is still PENDING
+(needs a macOS Tahoe 26 sample).**
 
-`segb-core` 0.1.0 is correct-by-construction from the ccl-segb reference
-implementation. The byte layout, record framing, CRC-32 algorithm, timestamp
-epoch, and alignment rules are sourced verbatim from the ccl-segb Python source.
-Synthetic fixtures in the integration test suite exercise all code paths.
-**No real macOS Tahoe 26 `App.MenuItem/local` sample has been tested.**
+`segb-core` is correct-by-construction from the ccl-segb reference (byte layout,
+record framing, CRC-32, timestamp epoch, alignment sourced verbatim), and its
+**SEGB v2 reader now reconciles exactly with ccl-segb on a real Apple Biome
+stream** (see below). What remains unconfirmed is only the App.MenuItem
+*protobuf* field numbering, which requires a real `App.MenuItem/local` from
+macOS Tahoe 26 (the stream does not exist on earlier macOS).
+
+### Real-data reconciliation (2026-06-14)
+
+A real Biome SEGB v2 stream from a macOS 15.7 (Sequoia) host —
+`~/Library/Biome/streams/restricted/Lighthouse.Ledger.TaskTelemetry/local/...`,
+a benign system-telemetry stream — was parsed by **both** ccl-segb (oracle) and
+`segb-core`, and the container parse matched **exactly**:
+
+| Field | ccl-segb (oracle) | segb-core | Match |
+|---|---|---|---|
+| Record count | 785 | 785 | ✅ |
+| Record states | all `Written` | all `Written` | ✅ |
+| First timestamp | `2026-05-30 02:58:20.870580` | `1780109900.870580` (= same UTC instant) | ✅ |
+
+This is a genuine, independent-oracle validation of the v2 container, record
+framing, state decoding, and Cocoa→Unix timestamp conversion against real Apple
+data — not synthetic fixtures. The sample is the host owner's private data and is
+**not** committed (Biome streams are user-private; `tests/data/` is gitignored).
+The `dump_structure` example reproduces the run on any SEGB file.
 
 ---
 
@@ -29,6 +51,7 @@ Synthetic fixtures in the integration test suite exercise all code paths.
 | App.MenuItem protobuf field 1 = application, field 2 = menu_item | forensicnomicon catalog `macos_biome_app_menuitem` + Unit 42 article | ⚠️ Inferred, not confirmed from a real sample |
 | End-to-end SEGB v1 round-trip | Synthetic byte-exact fixtures in `core/tests/segb_integration.rs` | ✅ 34 tests green |
 | End-to-end SEGB v2 round-trip | Synthetic byte-exact fixtures in `core/tests/segb_integration.rs` | ✅ 34 tests green |
+| **SEGB v2 container on REAL Apple Biome data** | **785-record telemetry stream reconciled with ccl-segb: count, states, timestamps all match** | ✅ **Real-data validated (2026-06-14)** |
 
 ---
 
