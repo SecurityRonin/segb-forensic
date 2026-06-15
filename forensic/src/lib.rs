@@ -184,7 +184,51 @@ impl Observation for Anomaly {
 /// `Written` timestamp to detect append-order violations.
 #[must_use]
 pub fn audit(records: &[SegbRecord]) -> Vec<Anomaly> {
-    // RED stub — no detection yet.
-    let _ = records;
-    Vec::new()
+    let mut out = Vec::new();
+    // The append-order baseline is the most recent *Written* record's timestamp;
+    // Deleted/Unknown records do not advance it.
+    let mut last_written_ts: Option<f64> = None;
+
+    for (index, record) in records.iter().enumerate() {
+        let offset = record.data_offset();
+
+        // CRC integrity is independent of state — check it for every record.
+        if !record.crc_ok() {
+            out.push(Anomaly::new(AnomalyKind::CrcMismatch {
+                index,
+                offset,
+                stored: record.stored_crc32(),
+                computed: record.computed_crc32(),
+            }));
+        }
+
+        match record.state() {
+            EntryState::Deleted => {
+                out.push(Anomaly::new(AnomalyKind::DeletedRecord { index, offset }));
+            }
+            EntryState::Written => match record.timestamp_unix() {
+                None => {
+                    out.push(Anomaly::new(AnomalyKind::MissingTimestamp { index, offset }));
+                }
+                Some(this_unix) => {
+                    if let Some(prev_unix) = last_written_ts {
+                        if this_unix < prev_unix {
+                            out.push(Anomaly::new(AnomalyKind::TimestampOutOfOrder {
+                                index,
+                                offset,
+                                prev_unix,
+                                this_unix,
+                            }));
+                        }
+                    }
+                    last_written_ts = Some(this_unix);
+                }
+            },
+            // An Unknown (v2 placeholder) slot — and any future state (the enum
+            // is #[non_exhaustive]) — carries no anomaly on its own.
+            _ => {}
+        }
+    }
+
+    out
 }

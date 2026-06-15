@@ -1,8 +1,8 @@
 //! Regression test against REAL Apple Biome SEGB files.
 //!
 //! Two small, benign device-telemetry streams extracted from Josh Hickman's
-//! public iOS 17.3 forensic image (DigitalCorpora, freely licensed for research)
-//! — a low-power-mode toggle stream (SEGB **v1**) and a TrueTone display stream
+//! public iOS 17.3 forensic image (`DigitalCorpora`, freely licensed for research)
+//! — a low-power-mode toggle stream (SEGB **v1**) and a `TrueTone` display stream
 //! (SEGB **v2**). No user content, no PII. Their record counts were reconciled
 //! against the ccl-segb reference oracle (16 and 7). These guard against
 //! regressions in the real-world v1/v2 container parse without needing the 22 GB
