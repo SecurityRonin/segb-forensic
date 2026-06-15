@@ -1,0 +1,19 @@
+[package]
+name         = "segb-forensic"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+authors.workspace      = true
+repository.workspace   = true
+description  = "Apple SEGB (Biome) forensic analyzer — CRC-mismatch, deletion-residue, and timestamp-ordering anomaly findings over segb-core records, emitted as forensicnomicon report Findings."
+keywords     = ["forensics", "macos", "biome", "segb", "dfir"]
+categories   = ["parser-implementations"]
+readme       = "README.md"
+
+[dependencies]
+segb = { workspace = true }
+forensicnomicon = { workspace = true }
+
+[lints]
+workspace = true
