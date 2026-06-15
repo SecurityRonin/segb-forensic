@@ -44,4 +44,4 @@ Findings are **observations, never verdicts** — the analyst concludes.
 
 Panic-free and `#![forbid(unsafe_code)]` (inherited from the workspace Paranoid Gatekeeper lints): SEGB files are untrusted, attacker-controllable input. The auditor is a pure function of already-decoded records — no I/O, no allocation surprises — and is exercised against constructed v1/v2 records covering each anomaly class plus clean and placeholder-state streams.
 
-[Privacy Policy](https://securityronin.github.io/segb-core/privacy/) · [Terms of Service](https://securityronin.github.io/segb-core/terms/) · © 2026 Security Ronin Ltd
+[Privacy Policy](https://securityronin.github.io/segb-forensic/privacy/) · [Terms of Service](https://securityronin.github.io/segb-forensic/terms/) · © 2026 Security Ronin Ltd
