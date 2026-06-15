@@ -14,7 +14,8 @@ protobuf payload. This workspace ships two crates:
   judgments — just bytes faithfully decoded.
 - **`segb-forensic`** — the analyzer. Walks the decoded records once and emits
   graded [`forensicnomicon::report`](https://crates.io/crates/forensicnomicon)
-  findings for CRC mismatch, deletion residue, and timestamp-ordering anomalies.
+  findings for CRC mismatch and timestamp-ordering anomalies (on `Written`
+  records only).
 
 ```rust
 use std::io::Cursor;
@@ -30,8 +31,7 @@ for anomaly in segb_forensic::audit(&records) {
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `SEGB-CRC-MISMATCH` | High | payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
-| `SEGB-RECORD-DELETED` | Medium | a logically-`Deleted` record still present — recoverable deletion residue |
+| `SEGB-CRC-MISMATCH` | High | a `Written` record's payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
 | `SEGB-TIMESTAMP-OUT-OF-ORDER` | Medium | a `Written` record older than a preceding one — append order broken |
 | `SEGB-TIMESTAMP-MISSING` | Low | a `Written` record with no finite timestamp |
 

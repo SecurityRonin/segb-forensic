@@ -3,7 +3,7 @@
 
 use forensicnomicon::report::{Observation, Severity, Source};
 use segb::{EntryState, SegbRecord, SegbV1Record};
-use segb_forensic::{audit, AnomalyKind};
+use segb_forensic::{audit, Anomaly, AnomalyKind};
 
 /// Build a v1 record with explicit fields; CRC is consistent unless overridden.
 fn rec(state: EntryState, ts: Option<f64>, stored_crc: u32, computed_crc: u32) -> SegbRecord {
@@ -54,12 +54,27 @@ fn crc_mismatch_is_high_severity() {
 }
 
 #[test]
-fn deleted_record_is_residue() {
-    let records = vec![rec(EntryState::Deleted, Some(1000.0), 0, 0)];
-    let a = audit(&records);
-    assert_eq!(a.len(), 1);
-    assert_eq!(a[0].code(), "SEGB-RECORD-DELETED");
-    assert_eq!(a[0].severity(), Severity::Medium);
+fn deleted_record_is_not_an_anomaly() {
+    // Deleted is the normal lifecycle state of a Biome append-log — never a
+    // finding, even though its wiped payload makes its stored CRC mismatch.
+    let records = vec![rec(
+        EntryState::Deleted,
+        Some(1000.0),
+        0x1111_1111,
+        0x2222_2222,
+    )];
+    assert!(
+        audit(&records).is_empty(),
+        "a Deleted record is normal, not an anomaly"
+    );
+}
+
+#[test]
+fn unknown_state_record_with_bad_crc_is_not_flagged() {
+    // CRC is only validated for Written records; a non-Written record's CRC
+    // mismatch must not produce a finding.
+    let records = vec![rec(EntryState::Unknown, None, 0xAAAA_AAAA, 0xBBBB_BBBB)];
+    assert!(audit(&records).is_empty());
 }
 
 #[test]
@@ -81,9 +96,14 @@ fn deleted_record_does_not_set_the_append_order_baseline() {
         rec(EntryState::Deleted, Some(9000.0), 0, 0),
         written(6000.0),
     ];
-    let codes: Vec<_> = audit(&records).into_iter().map(|a| a.code()).collect();
-    // only the deletion residue; 6000 > 5000 so no out-of-order
-    assert_eq!(codes, vec!["SEGB-RECORD-DELETED"]);
+    // The Deleted record is skipped (no finding) and its 9000 timestamp must not
+    // become the baseline; 6000 > 5000, so there is no out-of-order finding.
+    let found = audit(&records);
+    assert!(
+        found.is_empty(),
+        "{:?}",
+        found.iter().map(Anomaly::code).collect::<Vec<_>>()
+    );
 }
 
 #[test]

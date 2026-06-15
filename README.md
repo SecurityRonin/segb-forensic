@@ -12,7 +12,7 @@
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![Security advisories](https://img.shields.io/badge/security-cargo--deny-informational.svg)](deny.toml)
 
-**Apple SEGB (Biome) forensics for Rust — a panic-free reader that decodes the state-tagged, CRC-protected records of macOS/iOS user-activity streams, and a graded anomaly analyzer that flags the CRC mismatches, deletion residue, and out-of-order timestamps a casual read would miss.**
+**Apple SEGB (Biome) forensics for Rust — a panic-free reader that decodes the state-tagged, CRC-protected records of macOS/iOS user-activity streams, and a graded anomaly analyzer that flags the CRC mismatches and out-of-order or missing timestamps a casual read would miss.**
 
 SEGB is the container the **Biome** subsystem uses to log user activity on macOS and iOS — Safari history events, app launches, micro-location visits, the `App.MenuItem` selection stream, and more. Each stream is an append-ordered log of records carrying a state flag, one or two timestamps, and a raw protobuf payload. Two crates, one workspace:
 
@@ -47,10 +47,11 @@ SEGB streams are append-ordered logs of state-tagged, CRC-protected records — 
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `SEGB-CRC-MISMATCH` | High | payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
-| `SEGB-RECORD-DELETED` | Medium | a logically-`Deleted` record still present — recoverable deletion residue |
+| `SEGB-CRC-MISMATCH` | High | a `Written` record's payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
 | `SEGB-TIMESTAMP-OUT-OF-ORDER` | Medium | a `Written` record older than a preceding one — append order broken (clock change / reordering) |
 | `SEGB-TIMESTAMP-MISSING` | Low | a `Written` record with no finite timestamp |
+
+Findings apply to **`Written`** (live) records only. `Deleted`/`Unknown` records are the normal lifecycle of a Biome append-log — their payloads are wiped, so their CRC mismatches by construction; the ccl-segb reference validates CRC for `Written` records only, and so do we (zero false positives on a real benign stream).
 
 Findings are **observations, never verdicts** — the analyst concludes.
 

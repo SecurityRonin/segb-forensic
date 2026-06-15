@@ -6,12 +6,15 @@
 //! crate is where SEGB *forensic meaning* lives.
 //!
 //! SEGB streams are append-ordered logs of state-tagged, CRC-protected records.
-//! That structure makes a small set of tampering / corruption signals precise:
+//! Findings apply to **`Written`** (live) records only: `Deleted`/`Unknown`
+//! records are the normal lifecycle of a Biome append-log — their payloads are
+//! wiped, so their CRC mismatches by construction. The ccl-segb reference
+//! validates CRC for `Written` records only, and so do we, to avoid
+//! false-positives on every real stream.
 //!
 //! | Code | Severity | Meaning |
 //! |---|---|---|
-//! | `SEGB-CRC-MISMATCH` | High | record payload's CRC-32 ≠ stored CRC (corruption or post-write edit) |
-//! | `SEGB-RECORD-DELETED` | Medium | a logically-`Deleted` record still present (recoverable deletion residue) |
+//! | `SEGB-CRC-MISMATCH` | High | a `Written` record's payload CRC-32 ≠ stored CRC (corruption or post-write edit) |
 //! | `SEGB-TIMESTAMP-OUT-OF-ORDER` | Medium | a `Written` record older than a preceding one (append-order broken ⇒ clock change / tamper) |
 //! | `SEGB-TIMESTAMP-MISSING` | Low | a `Written` record with no finite timestamp |
 //!
@@ -37,14 +40,6 @@ pub enum AnomalyKind {
         stored: u32,
         /// CRC-32 recomputed over the payload bytes.
         computed: u32,
-    },
-    /// A record whose state is `Deleted` is still present in the stream and its
-    /// payload is recoverable — deletion residue (potential anti-forensics).
-    DeletedRecord {
-        /// Zero-based record index within the stream.
-        index: usize,
-        /// Byte offset of the payload.
-        offset: u64,
     },
     /// A `Written` record's timestamp predates a preceding `Written` record.
     /// SEGB streams are append-ordered, so a backwards step is consistent with
@@ -75,7 +70,6 @@ impl AnomalyKind {
     pub fn offset(&self) -> u64 {
         match self {
             Self::CrcMismatch { offset, .. }
-            | Self::DeletedRecord { offset, .. }
             | Self::TimestampOutOfOrder { offset, .. }
             | Self::MissingTimestamp { offset, .. } => *offset,
         }
@@ -86,7 +80,6 @@ impl AnomalyKind {
     pub fn index(&self) -> usize {
         match self {
             Self::CrcMismatch { index, .. }
-            | Self::DeletedRecord { index, .. }
             | Self::TimestampOutOfOrder { index, .. }
             | Self::MissingTimestamp { index, .. } => *index,
         }
@@ -95,7 +88,7 @@ impl AnomalyKind {
     fn severity(&self) -> Severity {
         match self {
             Self::CrcMismatch { .. } => Severity::High,
-            Self::DeletedRecord { .. } | Self::TimestampOutOfOrder { .. } => Severity::Medium,
+            Self::TimestampOutOfOrder { .. } => Severity::Medium,
             Self::MissingTimestamp { .. } => Severity::Low,
         }
     }
@@ -103,7 +96,6 @@ impl AnomalyKind {
     fn code(&self) -> &'static str {
         match self {
             Self::CrcMismatch { .. } => "SEGB-CRC-MISMATCH",
-            Self::DeletedRecord { .. } => "SEGB-RECORD-DELETED",
             Self::TimestampOutOfOrder { .. } => "SEGB-TIMESTAMP-OUT-OF-ORDER",
             Self::MissingTimestamp { .. } => "SEGB-TIMESTAMP-MISSING",
         }
@@ -119,9 +111,6 @@ impl AnomalyKind {
             } => format!(
                 "record {index}: stored CRC-32 {stored:#010x} != computed {computed:#010x} \
                  — payload corrupted or edited after write"
-            ),
-            Self::DeletedRecord { index, .. } => format!(
-                "record {index}: logically deleted but still present — recoverable deletion residue"
             ),
             Self::TimestampOutOfOrder {
                 index,
@@ -195,14 +184,20 @@ impl Observation for Anomaly {
 #[must_use]
 pub fn audit(records: &[SegbRecord]) -> Vec<Anomaly> {
     let mut out = Vec::new();
-    // The append-order baseline is the most recent *Written* record's timestamp;
-    // Deleted/Unknown records do not advance it.
     let mut last_written_ts: Option<f64> = None;
 
     for (index, record) in records.iter().enumerate() {
+        // Only `Written` records hold live, CRC-protected data with a meaningful
+        // timestamp. `Deleted`/`Unknown` (and any future #[non_exhaustive] state)
+        // are the normal lifecycle of a Biome append-log — their payloads are
+        // wiped, so their CRC mismatches by construction. Auditing them would
+        // false-positive on every real stream (the ccl-segb reference likewise
+        // validates CRC for `Written` records only).
+        if record.state() != EntryState::Written {
+            continue;
+        }
         let offset = record.data_offset();
 
-        // CRC integrity is independent of state — check it for every record.
         if !record.crc_ok() {
             out.push(Anomaly::new(AnomalyKind::CrcMismatch {
                 index,
@@ -212,34 +207,24 @@ pub fn audit(records: &[SegbRecord]) -> Vec<Anomaly> {
             }));
         }
 
-        match record.state() {
-            EntryState::Deleted => {
-                out.push(Anomaly::new(AnomalyKind::DeletedRecord { index, offset }));
-            }
-            EntryState::Written => match record.timestamp_unix() {
-                None => {
-                    out.push(Anomaly::new(AnomalyKind::MissingTimestamp {
-                        index,
-                        offset,
-                    }));
-                }
-                Some(this_unix) => {
-                    if let Some(prev_unix) = last_written_ts {
-                        if this_unix < prev_unix {
-                            out.push(Anomaly::new(AnomalyKind::TimestampOutOfOrder {
-                                index,
-                                offset,
-                                prev_unix,
-                                this_unix,
-                            }));
-                        }
+        match record.timestamp_unix() {
+            None => out.push(Anomaly::new(AnomalyKind::MissingTimestamp {
+                index,
+                offset,
+            })),
+            Some(this_unix) => {
+                if let Some(prev_unix) = last_written_ts {
+                    if this_unix < prev_unix {
+                        out.push(Anomaly::new(AnomalyKind::TimestampOutOfOrder {
+                            index,
+                            offset,
+                            prev_unix,
+                            this_unix,
+                        }));
                     }
-                    last_written_ts = Some(this_unix);
                 }
-            },
-            // An Unknown (v2 placeholder) slot — and any future state (the enum
-            // is #[non_exhaustive]) — carries no anomaly on its own.
-            _ => {}
+                last_written_ts = Some(this_unix);
+            }
         }
     }
 

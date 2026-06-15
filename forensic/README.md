@@ -33,10 +33,11 @@ SEGB streams are append-ordered logs of state-tagged, CRC-protected records — 
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `SEGB-CRC-MISMATCH` | High | payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
-| `SEGB-RECORD-DELETED` | Medium | a logically-`Deleted` record still present — recoverable deletion residue |
+| `SEGB-CRC-MISMATCH` | High | a `Written` record's payload CRC-32 ≠ stored CRC — corruption or a post-write edit |
 | `SEGB-TIMESTAMP-OUT-OF-ORDER` | Medium | a `Written` record older than a preceding one — append order broken (clock change / reordering) |
 | `SEGB-TIMESTAMP-MISSING` | Low | a `Written` record with no finite timestamp |
+
+Findings apply to `Written` records only — `Deleted`/`Unknown` records are the normal lifecycle of a Biome append-log (wiped payloads, CRC mismatches by construction), so auditing them would false-positive on every real stream.
 
 Findings are **observations, never verdicts** — the analyst concludes.
 

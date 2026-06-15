@@ -53,6 +53,32 @@ The `dump_structure` example reproduces the run on any SEGB file.
 
 ---
 
+## segb-forensic (analyzer) — zero false positives on real data
+
+The analyzer (`segb_forensic::audit`) was run over the two committed real iOS-17
+Biome fixtures and produces **no findings** — the correct result, since both are
+ordinary device telemetry. This is a regression test (`forensic/tests/real_fixtures.rs`).
+
+This check exposed and corrected a real design error caught only by real data
+(Doer-Checker): the first draft flagged every `Deleted` record and validated CRC
+for all states. But in a Biome append-log, **`Deleted` is the normal majority**
+(12 of 16 records in the `Device.Power.LowPowerMode` v1 fixture), and a deleted
+record's payload is wiped, so its stored CRC mismatches *by construction*. The
+**ccl-segb reference validates CRC for `Written` records only** (`ccl_segb1.py`:
+`if record.state == 1: print(CRC Passed ...)`), so the analyzer now does too —
+findings apply to `Written` records exclusively. On the real fixtures the 4
+`Written` records all have valid CRCs and monotonic timestamps → 0 findings.
+
+True-positive detection (bad CRC, backwards/missing timestamp on a `Written`
+record) is covered by constructed records in `forensic/tests/audit.rs`. There is
+no independent *anomaly-detection* oracle for SEGB — ccl-segb is a reader, not an
+analyzer — so the analyzer is validated by (a) construction against the
+documented format invariants and the ccl-segb CRC rule, and (b) a 0-false-positive
+check on real benign data. A full-corpus FP sweep over the 401-file iOS-17 image
+is the recommended next step when that image is mounted.
+
+---
+
 ## What Has Been Validated
 
 | Claim | Method | Status |

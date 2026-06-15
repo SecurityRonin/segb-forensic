@@ -11,13 +11,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `segb-forensic` `0.1.0` — the anomaly analyzer over `segb-core` records. Walks
   a parsed SEGB stream once and emits graded
   [`forensicnomicon::report`](https://crates.io/crates/forensicnomicon) findings:
-  - `SEGB-CRC-MISMATCH` (High) — payload CRC-32 ≠ stored CRC (corruption or a
-    post-write edit).
-  - `SEGB-RECORD-DELETED` (Medium) — a logically-`Deleted` record still present
-    (recoverable deletion residue).
+  Findings apply to `Written` (live) records only — `Deleted`/`Unknown` records
+  are the normal lifecycle of a Biome append-log (wiped payloads, CRC mismatches
+  by construction), so auditing them would false-positive on every real stream
+  (the ccl-segb reference likewise validates CRC for `Written` records only).
+  - `SEGB-CRC-MISMATCH` (High) — a `Written` record's payload CRC-32 ≠ stored CRC
+    (corruption or a post-write edit).
   - `SEGB-TIMESTAMP-OUT-OF-ORDER` (Medium) — a `Written` record older than a
     preceding one (append order broken — clock change or reordering).
   - `SEGB-TIMESTAMP-MISSING` (Low) — a `Written` record with no finite timestamp.
+  - Validated for zero false positives against the committed real iOS-17 Biome
+    fixtures (see `docs/validation.md`).
 
   Findings are observations, never verdicts. The auditor is a pure function of
   already-decoded records — no I/O — and is exercised against constructed v1/v2
