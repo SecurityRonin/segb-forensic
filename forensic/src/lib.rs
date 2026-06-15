@@ -111,14 +111,24 @@ impl AnomalyKind {
 
     fn note(&self) -> String {
         match self {
-            Self::CrcMismatch { index, stored, computed, .. } => format!(
+            Self::CrcMismatch {
+                index,
+                stored,
+                computed,
+                ..
+            } => format!(
                 "record {index}: stored CRC-32 {stored:#010x} != computed {computed:#010x} \
                  — payload corrupted or edited after write"
             ),
             Self::DeletedRecord { index, .. } => format!(
                 "record {index}: logically deleted but still present — recoverable deletion residue"
             ),
-            Self::TimestampOutOfOrder { index, prev_unix, this_unix, .. } => format!(
+            Self::TimestampOutOfOrder {
+                index,
+                prev_unix,
+                this_unix,
+                ..
+            } => format!(
                 "record {index}: timestamp {this_unix} precedes prior written record {prev_unix} \
                  — append order broken (clock change or reordering)"
             ),
@@ -208,7 +218,10 @@ pub fn audit(records: &[SegbRecord]) -> Vec<Anomaly> {
             }
             EntryState::Written => match record.timestamp_unix() {
                 None => {
-                    out.push(Anomaly::new(AnomalyKind::MissingTimestamp { index, offset }));
+                    out.push(Anomaly::new(AnomalyKind::MissingTimestamp {
+                        index,
+                        offset,
+                    }));
                 }
                 Some(this_unix) => {
                     if let Some(prev_unix) = last_written_ts {

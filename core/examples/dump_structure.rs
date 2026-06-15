@@ -7,7 +7,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: dump_structure <segb-file>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: dump_structure <segb-file>");
     let data = std::fs::read(&path).expect("read file");
     let mut cur = std::io::Cursor::new(data);
     let records = segb::read_segb(&mut cur).expect("parse SEGB");

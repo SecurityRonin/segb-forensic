@@ -19,11 +19,19 @@ pub enum SegbError {
 
     /// A record header is shorter than expected.
     #[error("truncated record header at offset {offset}: need {need} bytes, got {got}")]
-    TruncatedRecordHeader { offset: u64, need: usize, got: usize },
+    TruncatedRecordHeader {
+        offset: u64,
+        need: usize,
+        got: usize,
+    },
 
     /// A record payload is shorter than the length field claims.
     #[error("truncated record payload at offset {offset}: need {need} bytes, got {got}")]
-    TruncatedPayload { offset: u64, need: usize, got: usize },
+    TruncatedPayload {
+        offset: u64,
+        need: usize,
+        got: usize,
+    },
 
     /// A `record_length` value is negative, which is not valid.
     #[error("invalid record length {length} at offset {offset}")]
@@ -34,7 +42,9 @@ pub enum SegbError {
     InvalidEntryCount { count: i32 },
 
     /// The trailer size overflows the file size in SEGB v2.
-    #[error("SEGB v2 trailer ({trailer_bytes} bytes) exceeds stream length ({stream_bytes} bytes)")]
+    #[error(
+        "SEGB v2 trailer ({trailer_bytes} bytes) exceeds stream length ({stream_bytes} bytes)"
+    )]
     TrailerOverflow {
         trailer_bytes: u64,
         stream_bytes: u64,

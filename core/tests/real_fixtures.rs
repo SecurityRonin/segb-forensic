@@ -12,10 +12,7 @@
 use std::io::Cursor;
 
 fn fixture(name: &str) -> Vec<u8> {
-    let path = format!(
-        "{}/../tests/data/biome/{name}",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let path = format!("{}/../tests/data/biome/{name}", env!("CARGO_MANIFEST_DIR"));
     std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {path}: {e}"))
 }
 

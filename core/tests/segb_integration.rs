@@ -120,7 +120,7 @@ fn build_segb_v1(records: &[V1Record]) -> Vec<u8> {
         body.extend_from_slice(&le_f64(rec.ts2_cocoa));
         body.extend_from_slice(&le_u32(crc));
         body.extend_from_slice(&le_i32(0)); // unknown
-        // payload
+                                            // payload
         body.extend_from_slice(&rec.payload);
         // align to 8 bytes
         pad_to(&mut body, 8);
@@ -133,7 +133,7 @@ fn build_segb_v1(records: &[V1Record]) -> Vec<u8> {
     let mut file: Vec<u8> = Vec::with_capacity(V1_HEADER_LEN + body.len());
     file.extend_from_slice(&le_u32(end_of_data)); // offset 0
     file.extend(std::iter::repeat(0u8).take(48)); // offset 4..52: unknown
-    file.extend_from_slice(b"SEGB");               // offset 52: magic
+    file.extend_from_slice(b"SEGB"); // offset 52: magic
     file.extend(body);
     file
 }
@@ -197,19 +197,19 @@ fn build_segb_v2(records: &[V2Record]) -> Vec<u8> {
     // Build trailer entries.
     let mut trailer: Vec<u8> = Vec::new();
     for (i, rec) in records.iter().enumerate() {
-        trailer.extend_from_slice(&le_i32(end_offsets[i]));  // end_offset
-        trailer.extend_from_slice(&le_i32(rec.state));         // state
-        trailer.extend_from_slice(&le_f64(rec.ts_cocoa));      // timestamp
+        trailer.extend_from_slice(&le_i32(end_offsets[i])); // end_offset
+        trailer.extend_from_slice(&le_i32(rec.state)); // state
+        trailer.extend_from_slice(&le_f64(rec.ts_cocoa)); // timestamp
     }
 
     // Assemble the full file.
     let mut file: Vec<u8> = Vec::new();
     // 32-byte header
-    file.extend_from_slice(b"SEGB");                            // offset 0
-    file.extend_from_slice(&le_i32(records.len() as i32));     // offset 4
-    file.extend_from_slice(&le_f64(creation_ts));              // offset 8
-    file.extend(std::iter::repeat(0u8).take(16));              // offset 16..32
-    // entry area
+    file.extend_from_slice(b"SEGB"); // offset 0
+    file.extend_from_slice(&le_i32(records.len() as i32)); // offset 4
+    file.extend_from_slice(&le_f64(creation_ts)); // offset 8
+    file.extend(std::iter::repeat(0u8).take(16)); // offset 16..32
+                                                  // entry area
     file.extend(entry_area);
     // trailer
     file.extend(trailer);
@@ -230,8 +230,14 @@ fn test_v1_detect_magic() {
         payload: b"hello".to_vec(),
     }]);
     let mut cur = Cursor::new(&fixture);
-    assert!(is_segb_v1(&mut cur), "valid v1 fixture must be detected as v1");
-    assert!(!is_segb_v2(&mut cur), "v1 fixture must not be detected as v2");
+    assert!(
+        is_segb_v1(&mut cur),
+        "valid v1 fixture must be detected as v1"
+    );
+    assert!(
+        !is_segb_v2(&mut cur),
+        "v1 fixture must not be detected as v2"
+    );
 }
 
 #[test]
@@ -393,8 +399,14 @@ fn test_v2_detect_magic() {
         payload: b"hello v2".to_vec(),
     }]);
     let mut cur = Cursor::new(&fixture);
-    assert!(is_segb_v2(&mut cur), "valid v2 fixture must be detected as v2");
-    assert!(!is_segb_v1(&mut cur), "v2 fixture must not be detected as v1");
+    assert!(
+        is_segb_v2(&mut cur),
+        "valid v2 fixture must be detected as v2"
+    );
+    assert!(
+        !is_segb_v1(&mut cur),
+        "v2 fixture must not be detected as v1"
+    );
 }
 
 #[test]
@@ -489,7 +501,10 @@ fn test_v2_negative_entry_count_returns_error() {
     fixture[4..8].copy_from_slice(&(-1i32).to_le_bytes());
     let mut cur = Cursor::new(&fixture);
     let result = read_v2(&mut cur);
-    assert!(result.is_err(), "negative entries_count must return an error");
+    assert!(
+        result.is_err(),
+        "negative entries_count must return an error"
+    );
 }
 
 #[test]
@@ -624,7 +639,11 @@ mod proto_tests {
         let buf = encode_length_delimited(1, &invalid);
         let fields: Vec<_> = iter_fields(&buf).collect::<Result<_, _>>().unwrap();
         assert_eq!(fields.len(), 1);
-        assert_eq!(as_str(fields[0].raw), None, "invalid UTF-8 must return None");
+        assert_eq!(
+            as_str(fields[0].raw),
+            None,
+            "invalid UTF-8 must return None"
+        );
     }
 }
 

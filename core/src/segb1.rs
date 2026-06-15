@@ -259,10 +259,12 @@ pub(crate) fn crc32_of(data: &[u8]) -> u32 {
 mod hex {
     use std::fmt::Write as _;
     pub fn encode(bytes: &[u8]) -> String {
-        bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-            let _ = write!(s, "{b:02x}");
-            s
-        })
+        bytes
+            .iter()
+            .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+                let _ = write!(s, "{b:02x}");
+                s
+            })
     }
 }
 

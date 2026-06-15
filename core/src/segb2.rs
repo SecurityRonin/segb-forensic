@@ -192,7 +192,7 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
     // Metadata collected from the trailer; we sort by end_offset before
     // reading the body so we process entries in file order.
     struct TrailerEntry {
-        end_offset: i32,  // relative to HEADER_LENGTH
+        end_offset: i32, // relative to HEADER_LENGTH
         state: EntryState,
         timestamp_unix: Option<f64>,
     }
@@ -297,9 +297,10 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
 
 fn hex_encode(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
-
