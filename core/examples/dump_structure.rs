@@ -15,10 +15,13 @@ fn main() {
     let records = segb::read_segb(&mut cur).expect("parse SEGB");
     println!("records: {}", records.len());
     for (i, r) in records.iter().enumerate() {
+        // `crc_ok` is emitted so the differential harness can reconcile our
+        // CRC verdict against ccl-segb's `crc_passed` (Written records only).
         println!(
-            "  [{i}] state={:?} ts_unix={:?} payload_len={}",
+            "  [{i}] state={:?} ts_unix={:?} crc_ok={} payload_len={}",
             r.state(),
             r.timestamp_unix(),
+            r.crc_ok(),
             r.payload().len()
         );
     }

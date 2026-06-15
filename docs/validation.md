@@ -79,6 +79,52 @@ is the recommended next step when that image is mounted.
 
 ---
 
+## Oracle independence + reproducible reconciliation
+
+Validating against a single reference can bake in that reference's assumptions
+(and our own). We surveyed the SEGB tool landscape for a second *independent*
+oracle and found, by reading source directly:
+
+| Tool | SEGB parsing | Independent of ccl-segb? |
+|---|---|---|
+| **ccl-segb** (CCL / Alex Caithness) | yes — the canonical RE | — (it is the reference) |
+| **mac_apt** (Y. Khatri) | **none** — no SEGB/Biome parser in the repo | n/a |
+| **iLEAPP** (A. Brignoni) | yes, but **vendors `ccl_segb` verbatim** (`scripts/ccl_segb/…`) | **no** — same code, same blind spots |
+| Apollo | SQLite/knowledgeC focused, not raw SEGB | n/a |
+| Cellebrite PA / Magnet AXIOM | independent RE | yes, but **closed** — not scriptable as a diff oracle |
+
+**Conclusion:** there is no independent *open-source* SEGB parser besides
+ccl-segb. So the second and third validation legs cannot be another open-source
+tool — they must be (b) the published byte-layout writeups as a paper spec, and
+(c) **Apple-device ground truth** (perform a known action, confirm the decoded
+timestamp/state/payload matches), which is independent of every tool's RE.
+
+### Reproducible ccl-segb reconciliation
+
+`scripts/diff_vs_ccl_segb.py` makes the (previously ad-hoc) ccl-segb
+reconciliation re-runnable. For every record it reconciles **count, state,
+primary timestamp, and the CRC-32 verdict** between `segb-core` and ccl-segb:
+
+```sh
+git clone https://github.com/cclgroupltd/ccl-segb
+CCL_SEGB_PATH=$PWD/ccl-segb python3 scripts/diff_vs_ccl_segb.py tests/data/biome/*.segb
+# PASS  Device.Display.TrueTone.v2.segb   (7 records reconciled: count/state/timestamp/crc)
+# PASS  Device.Power.LowPowerMode.v1.segb (16 records reconciled: count/state/timestamp/crc)
+# 2/2 files reconciled with ccl-segb
+```
+
+Building this harness immediately earned its keep: it flagged a systematic
+8-hour (28 800 s) timestamp delta on every record. Tracing it to the raw
+conversion rather than assuming `segb-core` was wrong showed the discrepancy was
+in the *harness*, not the reader — ccl-segb's `COCOA_EPOCH` is a **naive**
+datetime, so calling `.timestamp()` on its output in a non-UTC zone (the test
+host is UTC+8) silently shifts every value by the local offset. `segb-core`'s
+`cocoa + 978307200` is timezone-free and correct; pinning ccl-segb's naive
+datetime to UTC made all 23 records across both fixtures reconcile exactly. (That
+naive-datetime trap is itself a real-world forensic hazard worth recording.)
+
+---
+
 ## What Has Been Validated
 
 | Claim | Method | Status |
