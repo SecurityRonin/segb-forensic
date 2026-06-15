@@ -1,0 +1,62 @@
+[package]
+name = "segb-forensic-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+# Standalone workspace: the fuzz crate must not be pulled into the parent
+# (core/forensic) workspace, whose virtual root manifest is not a package.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# The fuzzed structures (SEGB v1/v2 containers, the protobuf walker, the
+# App.MenuItem decoder) live in segb-core; the audit pipeline lives in
+# segb-forensic.
+[dependencies.segb-core]
+path = "../core"
+
+[dependencies.segb-forensic]
+path = "../forensic"
+
+[[bin]]
+name = "segb1"
+path = "fuzz_targets/segb1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "segb2"
+path = "fuzz_targets/segb2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "proto"
+path = "fuzz_targets/proto.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "menuitem"
+path = "fuzz_targets/menuitem.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "forensic"
+path = "fuzz_targets/forensic.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
