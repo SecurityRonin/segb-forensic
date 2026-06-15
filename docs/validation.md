@@ -13,7 +13,7 @@ stream** (see below). What remains unconfirmed is only the App.MenuItem
 *protobuf* field numbering, which requires a real `App.MenuItem/local` from
 macOS Tahoe 26 (the stream does not exist on earlier macOS).
 
-### Public iOS-17 reconciliation — 401/401, both variants (2026-06-14)
+### Public iOS-17 reconciliation — 401/401, both variants
 
 The strongest validation: **Josh Hickman's public iOS 17.3 image** (DigitalCorpora,
 CC for research) contains real Apple Biome SEGB streams. segb-core was run against
@@ -32,7 +32,7 @@ container readers against real Apple data, publicly and reproducibly (provenance
 MD5 in `issen/docs/corpus-catalog.md` entry A7). Note: the biome stream dirs unzip
 with restrictive Apple modes (0700) — `chmod -R u+rwX` before scanning.
 
-### Private macOS-15.7 reconciliation (2026-06-14)
+### Private macOS-15.7 reconciliation
 
 A real Biome SEGB v2 stream from a macOS 15.7 (Sequoia) host —
 `~/Library/Biome/streams/restricted/Lighthouse.Ledger.TaskTelemetry/local/...`,
@@ -142,7 +142,7 @@ naive-datetime trap is itself a real-world forensic hazard worth recording.)
 | App.MenuItem protobuf field 1 = application, field 2 = menu_item | forensicnomicon catalog `macos_biome_app_menuitem` + Unit 42 article | ⚠️ Inferred, not confirmed from a real sample |
 | End-to-end SEGB v1 round-trip | Synthetic byte-exact fixtures in `core/tests/segb_integration.rs` | ✅ 34 tests green |
 | End-to-end SEGB v2 round-trip | Synthetic byte-exact fixtures in `core/tests/segb_integration.rs` | ✅ 34 tests green |
-| **SEGB v2 container on REAL Apple Biome data** | **785-record telemetry stream reconciled with ccl-segb: count, states, timestamps all match** | ✅ **Real-data validated (2026-06-14)** |
+| **SEGB v2 container on REAL Apple Biome data** | **785-record telemetry stream reconciled with ccl-segb: count, states, timestamps all match** | ✅ **Real-data validated** |
 
 ---
 
