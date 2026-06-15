@@ -9,7 +9,7 @@ repository.workspace   = true
 description  = "Panic-free reader for Apple SEGB container files (Biome streams) — decodes SEGB v1 and v2 records with state, timestamps, and raw protobuf payload; includes App.MenuItem protobuf field walker"
 keywords     = ["forensics", "macos", "biome", "segb", "dfir"]
 categories   = ["parser-implementations", "filesystem"]
-exclude      = [".github/", ".pre-commit-config.yaml", "deny.toml", "renovate.json"]
+exclude      = ["/fuzz", "/.github", "/docs"]
 
 [lib]
 name = "segb"
