@@ -40,3 +40,23 @@ fn real_ios_segb_v2_record_count() {
         assert!(r.timestamp_unix().is_some(), "v2 record has a timestamp");
     }
 }
+
+/// Real **macOS 26.5 (Tahoe, build 25F71)** SEGB **v2** stream
+/// (`Device.Display.Backlight`). Its post-magic header field is `0x08` (vs
+/// `0x07` on iOS 17 v2) — a Tahoe-era bump our v2 reader tolerates. 8 records,
+/// every CRC valid. Extracted from a read-only mount of a `macos-tahoe-base` VM
+/// disk; benign device telemetry from an automated VM build, no user content.
+#[test]
+fn real_tahoe26_segb_v2_backlight() {
+    let data = fixture("Device.Display.Backlight.tahoe26.v2.segb");
+    let records = segb::read_segb(&mut Cursor::new(data)).expect("parse Tahoe v2 SEGB");
+    assert_eq!(records.len(), 8, "Tahoe Backlight record count");
+    for r in &records {
+        assert!(r.timestamp_unix().is_some(), "record has a timestamp");
+        assert_eq!(
+            r.stored_crc32(),
+            r.computed_crc32(),
+            "every Tahoe record's CRC must validate"
+        );
+    }
+}

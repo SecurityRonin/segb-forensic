@@ -16,3 +16,13 @@ reconciled exactly against the **ccl-segb** reference oracle, and the full image
 
 Exercised by `core/tests/real_fixtures.rs`. Image provenance + MD5 of the source
 tar.gz: `issen/docs/corpus-catalog.md` entry A7.
+
+#### Device.Display.Backlight.tahoe26.v2.segb — `REAL-self` (macOS 26.5 Tahoe)
+
+- **Identity:** a real Apple Biome **SEGB v2** stream from macOS 26.5 (build
+  25F71). Its post-magic header field is `0x08` vs `0x07` on iOS 17 v2 — a
+  Tahoe-era bump the v2 reader tolerates. 8 records, every CRC valid; benign
+  device-display telemetry, no user content/PII.
+- **Source:** read-only mount of a `macos-tahoe-base:latest` (cirruslabs, public)
+  VM disk; `/private/var/db/biome/streams/restricted/Device.Display.Backlight/local/<id>`.
+- **Asserted by:** `core/tests/real_fixtures.rs::real_tahoe26_segb_v2_backlight`.
