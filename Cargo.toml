@@ -7,7 +7,7 @@ members = ["core", "forensic"]
 # members inherit via `field.workspace = true`.
 # ---------------------------------------------------------------------------
 [workspace.package]
-version      = "0.1.1"
+version      = "0.2.0"
 edition      = "2021"
 rust-version = "1.81"
 license      = "Apache-2.0"
@@ -19,8 +19,8 @@ repository   = "https://github.com/SecurityRonin/segb-forensic"
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 thiserror = "2"
-segb = { version = "0.1", path = "core", package = "segb-core" }
-forensicnomicon = { version = "0.11", features = ["std"] }
+segb = { version = "0.2", path = "core", package = "segb-core" }
+forensicnomicon = { version = "1", features = ["std"] }
 
 # ---------------------------------------------------------------------------
 # Paranoid Gatekeeper: these crates parse untrusted, attacker-controllable
