@@ -47,14 +47,14 @@ dependencies = [
 
 [[package]]
 name = "segb-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "segb-forensic"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "forensicnomicon",
  "segb-core",
