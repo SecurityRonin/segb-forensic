@@ -112,3 +112,25 @@ pub(crate) fn le_f64(data: &[u8], off: usize) -> f64 {
 pub(crate) fn le_i32_at(data: &[u8], off: usize) -> i32 {
     le_i32(data, off)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_f64_returns_nan_on_short_slice() {
+        // Fewer than 8 bytes available at the offset — the bounds-safe reader
+        // must return NaN rather than panic.
+        assert!(le_f64(&[0u8; 4], 0).is_nan());
+        assert!(le_f64(&[], 0).is_nan());
+        // A full 8-byte slice decodes normally.
+        assert_eq!(le_f64(&1.5f64.to_le_bytes(), 0).to_bits(), 1.5f64.to_bits());
+    }
+
+    #[test]
+    fn is_live_only_for_written() {
+        assert!(EntryState::Written.is_live());
+        assert!(!EntryState::Deleted.is_live());
+        assert!(!EntryState::Unknown.is_live());
+    }
+}

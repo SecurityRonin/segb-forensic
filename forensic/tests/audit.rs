@@ -138,3 +138,46 @@ fn anomaly_converts_to_canonical_finding() {
         Some(forensicnomicon::report::Location::ByteOffset(_))
     )));
 }
+
+#[test]
+fn timestamp_out_of_order_metadata_and_note() {
+    // A backwards-stepping written record produces an out-of-order anomaly;
+    // exercise its severity, index/offset accessors and canonical note.
+    let records = vec![written(5000.0), written(1000.0)];
+    let a = audit(&records);
+    assert_eq!(a.len(), 1);
+    let anomaly = &a[0];
+    assert_eq!(anomaly.severity(), Severity::Medium);
+    assert_eq!(anomaly.kind.index(), 1);
+    assert_eq!(anomaly.kind.offset(), 0x100);
+    let f = anomaly.to_finding(Source {
+        analyzer: "segb-forensic".to_string(),
+        scope: "SEGB".to_string(),
+        version: None,
+    });
+    assert!(f.note.contains("append order"), "note: {}", f.note);
+}
+
+#[test]
+fn missing_timestamp_metadata_and_note() {
+    let records = vec![rec(EntryState::Written, None, 7, 7)];
+    let a = audit(&records);
+    assert_eq!(a.len(), 1);
+    let anomaly = &a[0];
+    assert_eq!(anomaly.kind.index(), 0);
+    assert_eq!(anomaly.kind.offset(), 0x100);
+    let f = anomaly.to_finding(Source {
+        analyzer: "segb-forensic".to_string(),
+        scope: "SEGB".to_string(),
+        version: None,
+    });
+    assert!(f.note.contains("no finite timestamp"), "note: {}", f.note);
+}
+
+#[test]
+fn crc_mismatch_index_and_offset_accessors() {
+    let records = vec![rec(EntryState::Written, Some(1.0), 1, 2)];
+    let a = audit(&records);
+    assert_eq!(a[0].kind.index(), 0);
+    assert_eq!(a[0].kind.offset(), 0x100);
+}

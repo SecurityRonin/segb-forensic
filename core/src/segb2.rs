@@ -203,8 +203,11 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
     for _ in 0..entries_count {
         let n = r.read(&mut trailer_raw)?;
         if n < TRAILER_ENTRY_LENGTH {
-            // Truncated trailer — stop gracefully.
-            break;
+            // Truncated trailer — stop gracefully. Defensive: `trailer_start`
+            // positions the cursor so exactly `entries_count * 16` bytes remain,
+            // so a full read always succeeds for a well-behaved reader; kept in
+            // case a future `Read` impl under-fills a non-EOF read.
+            break; // cov:unreachable: trailer_start guarantees 16 bytes remain per iteration
         }
         // struct "<2id": i32 end_offset, i32 state, f64 timestamp
         let end_offset = le_i32(&trailer_raw, 0);
@@ -237,10 +240,21 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
         }
 
         let current_pos = r.stream_position()?;
-        // entry_end_offset is relative to HEADER_LENGTH.
-        let abs_end = HEADER_LENGTH as u64 + t.end_offset as u64;
-        if abs_end < current_pos {
-            // End offset is behind us — malformed trailer. Skip.
+        // entry_end_offset is relative to HEADER_LENGTH. Compute in signed i64
+        // so a negative (malformed) end_offset does not sign-extend into a huge
+        // u64 and overflow the addition; the guard below then rejects it.
+        let abs_end = HEADER_LENGTH as i64 + i64::from(t.end_offset);
+        if abs_end < current_pos as i64 {
+            // End offset is behind us (or negative) — malformed trailer. Skip.
+            continue;
+        }
+        let abs_end = abs_end as u64;
+        if abs_end > stream_len {
+            // Entry body would extend past EOF — malformed trailer. Skip.
+            // Bounding the entry within the file here (a range-check of the
+            // offset before use) makes the sub-header and payload reads below
+            // infallible: they cannot short-read, and the payload allocation is
+            // capped by the file size rather than by an attacker-chosen offset.
             continue;
         }
         let entry_total = (abs_end - current_pos) as usize;
@@ -249,12 +263,11 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
             continue;
         }
 
-        // Read sub-header (8 bytes): crc32 (u32) + unknown (i32).
-        let mut sub_hdr = vec![0u8; ENTRY_HEADER_LENGTH];
-        let n = r.read(&mut sub_hdr)?;
-        if n < ENTRY_HEADER_LENGTH {
-            break; // truncated
-        }
+        // Read sub-header (8 bytes): crc32 (u32) + unknown (i32). The bounds
+        // check above guarantees these bytes are present, so read_exact cannot
+        // short-read on a well-formed cursor.
+        let mut sub_hdr = [0u8; ENTRY_HEADER_LENGTH];
+        r.read_exact(&mut sub_hdr)?;
 
         // CCL's struct is `"Ii"` without an explicit endian prefix, which
         // defaults to native. On every Apple platform this is little-endian.
@@ -264,14 +277,7 @@ pub fn read_v2<R: Read + Seek>(r: &mut R) -> Result<Vec<SegbV2Record>> {
         let data_offset = r.stream_position()?;
 
         let mut payload = vec![0u8; payload_len];
-        let n = r.read(&mut payload)?;
-        if n < payload_len {
-            return Err(SegbError::TruncatedPayload {
-                offset: data_offset,
-                need: payload_len,
-                got: n,
-            });
-        }
+        r.read_exact(&mut payload)?;
 
         let computed_crc32 = segb1::crc32_of(&payload);
 

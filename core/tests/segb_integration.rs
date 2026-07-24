@@ -765,3 +765,334 @@ fn test_cocoa_to_unix() {
     assert!(cocoa_to_unix_secs(f64::NAN).is_none());
     assert!(cocoa_to_unix_secs(f64::INFINITY).is_none());
 }
+
+// ---------------------------------------------------------------------------
+// EntryState::is_live
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_entry_state_is_live() {
+    assert!(EntryState::Written.is_live());
+    assert!(!EntryState::Deleted.is_live());
+    assert!(!EntryState::Unknown.is_live());
+}
+
+// ---------------------------------------------------------------------------
+// is_segb_* on a reader whose seek fails (I/O-error defensive path)
+// ---------------------------------------------------------------------------
+
+/// A reader whose every seek fails — models a non-seekable stream so the
+/// signature probes exercise their `stream_position()` error branch.
+struct FailingSeek;
+
+impl std::io::Read for FailingSeek {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl std::io::Seek for FailingSeek {
+    fn seek(&mut self, _pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        Err(std::io::Error::other("seek unsupported"))
+    }
+}
+
+#[test]
+fn test_is_segb_returns_false_on_seek_error() {
+    let mut r1 = FailingSeek;
+    assert!(!is_segb_v1(&mut r1), "v1 probe must be false on seek error");
+    let mut r2 = FailingSeek;
+    assert!(!is_segb_v2(&mut r2), "v2 probe must be false on seek error");
+}
+
+// ---------------------------------------------------------------------------
+// SEGB v1 error paths
+// ---------------------------------------------------------------------------
+
+/// Build a bare v1 header (56 bytes) with the given `end_of_data_offset`.
+fn v1_header(end_of_data: u32) -> Vec<u8> {
+    let mut file = Vec::new();
+    file.extend_from_slice(&le_u32(end_of_data)); // offset 0
+    file.extend(std::iter::repeat(0u8).take(48)); // offset 4..52
+    file.extend_from_slice(b"SEGB"); // offset 52
+    file
+}
+
+#[test]
+fn test_v1_negative_record_length_returns_error() {
+    // A record header whose record_length is negative is structurally invalid.
+    let mut file = v1_header((V1_HEADER_LEN + 32) as u32);
+    file.extend_from_slice(&le_i32(-1)); // record_length < 0
+    file.extend_from_slice(&le_i32(1)); // state Written
+    file.extend_from_slice(&le_f64(0.0)); // ts1
+    file.extend_from_slice(&le_f64(0.0)); // ts2
+    file.extend_from_slice(&le_u32(0)); // crc
+    file.extend_from_slice(&le_i32(0)); // unknown
+    let mut cur = Cursor::new(&file);
+    assert!(
+        matches!(
+            read_v1(&mut cur),
+            Err(segb::SegbError::InvalidLength { .. })
+        ),
+        "negative record length must be InvalidLength"
+    );
+}
+
+#[test]
+fn test_v1_truncated_record_header_returns_error() {
+    // end_of_data claims a record, but only a partial record header follows.
+    let mut file = v1_header(200);
+    file.extend(std::iter::repeat(0u8).take(10)); // 10 < 32-byte record header
+    let mut cur = Cursor::new(&file);
+    assert!(
+        matches!(
+            read_v1(&mut cur),
+            Err(segb::SegbError::TruncatedRecordHeader { .. })
+        ),
+        "partial record header must be TruncatedRecordHeader"
+    );
+}
+
+#[test]
+fn test_v1_eof_at_record_boundary_stops_gracefully() {
+    // end_of_data points past EOF, but EOF falls exactly on a record boundary
+    // (zero bytes left) — the reader stops gracefully with no records.
+    let file = v1_header(200); // header only, no body
+    let mut cur = Cursor::new(&file);
+    let recs = read_v1(&mut cur).unwrap();
+    assert!(recs.is_empty(), "clean EOF at a boundary yields no records");
+}
+
+// ---------------------------------------------------------------------------
+// SEGB v2 error / skip paths
+// ---------------------------------------------------------------------------
+
+/// Assemble a v2 file from a raw entry area and explicit trailer entries
+/// `(end_offset, state, ts_cocoa)`, so tests control end_offset directly.
+fn build_v2_raw(entry_area: &[u8], trailer: &[(i32, i32, f64)]) -> Vec<u8> {
+    let mut file = Vec::new();
+    file.extend_from_slice(b"SEGB"); // magic
+    file.extend_from_slice(&le_i32(trailer.len() as i32)); // entries_count
+    file.extend_from_slice(&le_f64(0.0)); // creation ts
+    file.extend(std::iter::repeat(0u8).take(16)); // padding → 32-byte header
+    file.extend_from_slice(entry_area);
+    for &(end_offset, state, ts) in trailer {
+        file.extend_from_slice(&le_i32(end_offset));
+        file.extend_from_slice(&le_i32(state));
+        file.extend_from_slice(&le_f64(ts));
+    }
+    file
+}
+
+#[test]
+fn test_v2_trailer_overflow_returns_error() {
+    // entries_count huge → trailer_bytes far exceeds the file size.
+    let mut file = Vec::new();
+    file.extend_from_slice(b"SEGB");
+    file.extend_from_slice(&le_i32(1000)); // entries_count
+    file.extend_from_slice(&le_f64(0.0));
+    file.extend(std::iter::repeat(0u8).take(16)); // 32-byte header only
+    let mut cur = Cursor::new(&file);
+    assert!(
+        matches!(
+            read_v2(&mut cur),
+            Err(segb::SegbError::TrailerOverflow { .. })
+        ),
+        "oversized entries_count must be TrailerOverflow"
+    );
+}
+
+#[test]
+fn test_v2_unknown_state_entry_is_skipped() {
+    // state 4 (Unknown) entries are skipped without reading a body.
+    let entry_area = vec![0u8; 16];
+    let file = build_v2_raw(&entry_area, &[(8, 4, 0.0)]);
+    let mut cur = Cursor::new(&file);
+    assert!(read_v2(&mut cur).unwrap().is_empty());
+}
+
+#[test]
+fn test_v2_negative_end_offset_entry_is_skipped() {
+    // A negative end_offset resolves behind the read cursor — skipped, no panic.
+    let entry_area = vec![0u8; 16];
+    let file = build_v2_raw(&entry_area, &[(-100, 1, 0.0)]);
+    let mut cur = Cursor::new(&file);
+    assert!(read_v2(&mut cur).unwrap().is_empty());
+}
+
+#[test]
+fn test_v2_end_offset_past_eof_is_skipped() {
+    // An end_offset pointing past EOF is malformed — skipped, no huge alloc.
+    let entry_area = vec![0u8; 16];
+    let file = build_v2_raw(&entry_area, &[(100_000, 1, 0.0)]);
+    let mut cur = Cursor::new(&file);
+    assert!(read_v2(&mut cur).unwrap().is_empty());
+}
+
+#[test]
+fn test_v2_entry_too_small_for_subheader_is_skipped() {
+    // entry_total < ENTRY_HEADER_LENGTH (8) — not enough for a sub-header.
+    let entry_area = vec![0u8; 16];
+    let file = build_v2_raw(&entry_area, &[(4, 1, 0.0)]);
+    let mut cur = Cursor::new(&file);
+    assert!(read_v2(&mut cur).unwrap().is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// protobuf walker — wire types and malformed-input paths
+// ---------------------------------------------------------------------------
+
+mod proto_wire_type_tests {
+    use segb::proto::{iter_fields, WireType};
+    use segb::SegbError;
+
+    fn encode_varint(mut v: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        loop {
+            let b = (v & 0x7F) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                break;
+            }
+            out.push(b | 0x80);
+        }
+        out
+    }
+
+    fn tag(field: u32, wire: u64) -> Vec<u8> {
+        encode_varint((u64::from(field) << 3) | wire)
+    }
+
+    #[test]
+    fn bit64_field_is_decoded() {
+        let mut buf = tag(1, 1); // wire type 1 = 64-bit
+        buf.extend_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        let fields: Vec<_> = iter_fields(&buf).collect::<Result<_, _>>().unwrap();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].wire_type, WireType::Bit64);
+        assert_eq!(fields[0].raw.len(), 8);
+    }
+
+    #[test]
+    fn bit64_truncated_errors() {
+        let mut buf = tag(1, 1);
+        buf.extend_from_slice(&[1, 2, 3]); // only 3 of 8 bytes
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::ProtobufOverflow { .. })));
+    }
+
+    #[test]
+    fn bit32_field_is_decoded() {
+        let mut buf = tag(2, 5); // wire type 5 = 32-bit
+        buf.extend_from_slice(&[9, 8, 7, 6]);
+        let fields: Vec<_> = iter_fields(&buf).collect::<Result<_, _>>().unwrap();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].wire_type, WireType::Bit32);
+        assert_eq!(fields[0].raw.len(), 4);
+    }
+
+    #[test]
+    fn bit32_truncated_errors() {
+        let mut buf = tag(2, 5);
+        buf.extend_from_slice(&[9, 8]); // only 2 of 4 bytes
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::ProtobufOverflow { .. })));
+    }
+
+    #[test]
+    fn unknown_wire_type_stops_iteration() {
+        // wire type 3 (group start) is not one of {0,1,2,5} → iterator ends.
+        let mut buf = tag(1, 3);
+        buf.extend_from_slice(&[0, 0, 0]);
+        let fields: Vec<_> = iter_fields(&buf).collect::<Result<_, _>>().unwrap();
+        assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn multibyte_varint_value_is_decoded() {
+        // value ≥ 128 → a 2-byte varint, exercising the continuation branch.
+        let mut buf = tag(3, 0);
+        buf.extend(encode_varint(300));
+        let fields: Vec<_> = iter_fields(&buf).collect::<Result<_, _>>().unwrap();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].wire_type, WireType::Varint);
+    }
+
+    #[test]
+    fn truncated_tag_varint_errors() {
+        // a lone continuation byte: the varint never terminates before EOF.
+        let buf = [0x80u8];
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::MalformedVarint { .. })));
+    }
+
+    #[test]
+    fn overlong_varint_errors() {
+        // 10+ continuation bytes with no terminator → malformed (shift ≥ 70).
+        let buf = [0x80u8; 11];
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::MalformedVarint { .. })));
+    }
+
+    #[test]
+    fn truncated_varint_value_errors() {
+        // valid varint tag then a value varint truncated at EOF.
+        let mut buf = tag(1, 0);
+        buf.push(0x80);
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::MalformedVarint { .. })));
+    }
+
+    #[test]
+    fn truncated_length_delimited_length_varint_errors() {
+        // valid length-delimited tag then a length varint truncated at EOF.
+        let mut buf = tag(1, 2);
+        buf.push(0x80);
+        let r: Result<Vec<_>, _> = iter_fields(&buf).collect();
+        assert!(matches!(r, Err(SegbError::MalformedVarint { .. })));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// App.MenuItem — decode_all / is_valid_app_menu_item_payload
+// ---------------------------------------------------------------------------
+
+mod menuitem_extra_tests {
+    use segb::menuitem::{decode_all, is_valid_app_menu_item_payload};
+
+    fn ld(field: u8, data: &[u8]) -> Vec<u8> {
+        let mut out = vec![(field << 3) | 2, data.len() as u8]; // wire type 2
+        out.extend_from_slice(data);
+        out
+    }
+
+    #[test]
+    fn decode_all_maps_each_payload() {
+        let p1 = ld(1, b"Finder");
+        let p2 = ld(2, b"Empty Trash");
+        let recs = decode_all(vec![(p1.as_slice(), Some(1.0f64)), (p2.as_slice(), None)]).unwrap();
+        assert_eq!(recs.len(), 2);
+        assert_eq!(recs[0].application.as_deref(), Some("Finder"));
+        assert_eq!(recs[1].menu_item.as_deref(), Some("Empty Trash"));
+    }
+
+    #[test]
+    fn decode_all_propagates_error() {
+        // A malformed payload (length-delimited claiming 100 bytes) fails fast.
+        let bad = [0x0Au8, 100u8];
+        assert!(decode_all(vec![(bad.as_slice(), None)]).is_err());
+    }
+
+    #[test]
+    fn is_valid_true_for_wellformed() {
+        let p = ld(1, b"Safari");
+        assert!(is_valid_app_menu_item_payload(&p));
+    }
+
+    #[test]
+    fn is_valid_false_for_malformed() {
+        let bad = [0x0Au8, 100u8]; // length-delimited claiming 100 bytes
+        assert!(!is_valid_app_menu_item_payload(&bad));
+    }
+}
